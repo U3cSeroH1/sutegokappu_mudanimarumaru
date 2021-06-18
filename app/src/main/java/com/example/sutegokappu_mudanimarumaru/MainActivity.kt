@@ -1,27 +1,31 @@
 package com.example.sutegokappu_mudanimarumaru
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
+import android.content.*
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Vibrator
+import android.os.*
 import android.support.wearable.activity.WearableActivity
 import android.util.Log
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.wear.ambient.AmbientModeSupport
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.*
+import com.google.android.gms.tasks.Task
 
 
-class MainActivity : WearableActivity(), SensorEventListener {
+class MainActivity : WearableActivity(),  SensorEventListener, AsyncTaskCallbacks {
 
     private var mSensorManager: SensorManager? = null
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
 
     private var heartBeatTextView: TextView? = null
@@ -34,15 +38,31 @@ class MainActivity : WearableActivity(), SensorEventListener {
     private val id = "mudanimarumaru_01"
 
 
+    private lateinit var locationCallback: LocationCallback
+    private lateinit var locationRequest: LocationRequest
+    private var requestingLocationUpdates: Boolean = true
+
+    private lateinit var ambientController: AmbientModeSupport.AmbientController
+
+    val REQUEST_CHECK_SETTINGS:Int = 1
+
+
+
+
+    val br: BroadcastReceiver = MyBroadcastReceiver()
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
 
         heartBeatTextView = findViewById<TextView>(R.id.heartBeat_ui_text)
         pressureTextView = findViewById<TextView>(R.id.ambientTemperature_ui_text)
         lightTextView = findViewById<TextView>(R.id.light_ui_text)
         accelerometerTextView = findViewById<TextView>(R.id.accelerometer_ui_text)
 
+        //センサー初期化
         mSensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         val sensorHeartRate: Sensor = mSensorManager!!.getDefaultSensor(Sensor.TYPE_HEART_RATE)
         val sensorPressure: Sensor = mSensorManager!!.getDefaultSensor(Sensor.TYPE_PRESSURE)
@@ -53,12 +73,137 @@ class MainActivity : WearableActivity(), SensorEventListener {
         mSensorManager!!.registerListener(this, sensorTypeLight, SensorManager.SENSOR_DELAY_NORMAL)
         mSensorManager!!.registerListener(this, sensorAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
 
+        //アクティビティトランジションのWIP
+//        val transitions = mutableListOf<ActivityTransition>()
+//
+//        transitions +=
+//            ActivityTransition.Builder()
+//                .setActivityType(DetectedActivity.IN_VEHICLE)
+//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+//                .build()
+//
+//        transitions +=
+//            ActivityTransition.Builder()
+//                .setActivityType(DetectedActivity.IN_VEHICLE)
+//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
+//                .build()
+//
+//        transitions +=
+//            ActivityTransition.Builder()
+//                .setActivityType(DetectedActivity.WALKING)
+//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+//                .build()
+//
+//        transitions +=
+//            ActivityTransition.Builder()
+//                .setActivityType(DetectedActivity.STILL)
+//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+//                .build()
+//
+//        val request = ActivityTransitionRequest(transitions)
+//
+//        // Create an explicit intent for an Activity in your app
+//        val intent = Intent(this, MyBroadcastReceiver::class.java).apply {
+//            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+//        }
+//        val myPendingIntent: PendingIntent = PendingIntent.getBroadcast(this, 1, intent, 0)
+//
+//        val activityTask = ActivityRecognition.getClient(this)
+//            .requestActivityTransitionUpdates(request, myPendingIntent)
+//
+//        activityTask.addOnSuccessListener {
+//            // Handle success
+//            Log.e("アクティビティ", "成功")
+//            //myPendingIntent.cancel()
+//        }
+//        activityTask.addOnFailureListener { e: Exception ->
+//            // Handle error
+//            Log.e("アクティビティ", e.localizedMessage)
+//        }
+//        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION).apply {
+//            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+//        }
+//        registerReceiver(br, filter)
+
+
         // Enables Always-on
+        //ambientController = AmbientModeSupport.attach(this)
         setAmbientEnabled()
+
+        //通知周り
         createNotificationChannel()
 
-        var hoges = hoge()
-        Log.d(hoges,lightTextView!!.text as String)
+        //位置情報らへん
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        createLocationRequest()
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult?) {
+                locationResult ?: return
+                for (location in locationResult.locations){
+                    // Update UI with location data
+                    // ...
+                    //Log.d("リアルタイム更新で位置情報を取れた！！！！！！", location!!.latitude.toString())
+                    accelerometerTextView!!.text = "緯度" + location!!.latitude.toString() + "軽度" + location!!.longitude.toString()
+                }
+            }
+        }
+        if (requestingLocationUpdates) startLocationUpdates()
+        //end
+
+        //位置情報権限の要求
+        val builder = LocationSettingsRequest.Builder()
+        val client: SettingsClient = LocationServices.getSettingsClient(this)
+        val task: Task<LocationSettingsResponse> = client.checkLocationSettings(builder.build())
+        task.addOnSuccessListener { locationSettingsResponse ->
+            // All location settings are satisfied. The client can initialize
+            // location requests here.
+            // ...
+        }
+        task.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException){
+                // Location settings are not satisfied, but this can be fixed
+                // by showing the user a dialog.
+                try {
+                    // Show the dialog by calling startResolutionForResult(),
+                    // and check the result in onActivityResult().
+                    exception.startResolutionForResult(this@MainActivity,
+                        REQUEST_CHECK_SETTINGS)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    // Ignore the error.
+                }
+            }
+        }
+        //end
+
+
+        //汎用
+        val handler = Handler()
+        val r: Runnable = object : Runnable {
+            var count = 0
+            override fun run() {
+                // UIスレッド
+                //                count++
+                //                if (count > 5) { // 5回実行したら終了
+                //                    return
+                //                }
+                //doSomething() // 何かやる
+
+                Log.d("くりかえす！", "一分ごとに！！")
+
+                //ここに書いてけ
+
+                //pushNotificationCustom("一分後との奴")
+
+                handler.postDelayed(this, 60000)
+
+
+            }
+        }
+        handler.post(r)
+
+
+        val async = Async(this)
+        async.execute() //非同期処理呼び出し
 
     }
 
@@ -67,10 +212,11 @@ class MainActivity : WearableActivity(), SensorEventListener {
 
     }
 
+
     override fun onResume() {
         super.onResume()
-
     }
+
 
     override fun onSensorChanged(event: SensorEvent?) {
 
@@ -156,9 +302,32 @@ class MainActivity : WearableActivity(), SensorEventListener {
         }
     }
 
-    fun hoge(): String{
-        Log.d("照度が変わった！",lightTextView!!.text as String)
-        return "unko"
+    //override fun getAmbientCallback(): AmbientModeSupport.AmbientCallback = MyAmbientCallback()
+
+    private fun hasGps(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS)
+
+    private fun createLocationRequest() {
+        locationRequest = LocationRequest.create()?.apply {
+            interval = 10000
+            fastestInterval = 5000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }!!
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        fusedLocationClient.requestLocationUpdates(locationRequest,
+            locationCallback,
+            Looper.getMainLooper())
+    }
+
+    override fun onTaskFinished() {
+        Log.d("ko-rubakku!", "わーーーーー！！！")
+    }
+
+    override fun onTaskCancelled() {
+
     }
 
 
