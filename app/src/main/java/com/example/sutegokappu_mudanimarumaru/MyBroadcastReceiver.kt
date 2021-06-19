@@ -10,7 +10,7 @@ private const val TAG = "MyBroadcastReceiver"
 
 class MyBroadcastReceiver : BroadcastReceiver() {
 
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(context: Context?, intent: Intent?) {
 //        StringBuilder().apply {
 //            append("Action: ${intent.action}\n")
 //            append("URI: ${intent.toUri(Intent.URI_INTENT_SCHEME)}\n")
@@ -22,13 +22,14 @@ class MyBroadcastReceiver : BroadcastReceiver() {
 
         if (ActivityTransitionResult.hasResult(intent)) {
             val result = ActivityTransitionResult.extractResult(intent)!!
+            Log.e("アクティビティ", "uwaa")
             for (event in result.transitionEvents) {
                 // chronological sequence of events....
                 Log.e("アクティビティ", event.activityType.toString())
             }
         }
 
-        Log.e("アクティビティ", ActivityTransitionResult.hasResult(intent).toString())
+        Log.e("なんか来てるよ！！", ActivityTransitionResult.hasResult(intent).toString())
 
     }
 }

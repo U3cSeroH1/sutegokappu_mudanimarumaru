@@ -46,10 +46,28 @@ class MainActivity : WearableActivity(),  SensorEventListener, AsyncTaskCallback
 
     val REQUEST_CHECK_SETTINGS:Int = 1
 
+    private var mActivityTransitionsPendingIntent : PendingIntent? = null
+    private var mTransitionsReceiver: TransitionsReceiver? = null
+    private val TRANSITIONS_RECEIVER_ACTION = BuildConfig.APPLICATION_ID + "TRANSITIONS_RECEIVER_ACTION"
+
+    inner class TransitionsReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (ActivityTransitionResult.hasResult(intent)) {
+                val result = ActivityTransitionResult.extractResult(intent)!!
+                Log.e("アクティビティ", "uwaa")
+                for (event in result.transitionEvents) {
+                    // chronological sequence of events....
+                    Log.e("アクティビティ", event.activityType.toString())
+
+                }
+                pushNotificationCustom("動いた！！！！")
 
 
+            }
 
-    val br: BroadcastReceiver = MyBroadcastReceiver()
+            Log.e("なんか来てるよ！！", ActivityTransitionResult.hasResult(intent).toString())
+        }
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,58 +91,56 @@ class MainActivity : WearableActivity(),  SensorEventListener, AsyncTaskCallback
         mSensorManager!!.registerListener(this, sensorTypeLight, SensorManager.SENSOR_DELAY_NORMAL)
         mSensorManager!!.registerListener(this, sensorAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
 
-        //アクティビティトランジションのWIP
-//        val transitions = mutableListOf<ActivityTransition>()
-//
-//        transitions +=
-//            ActivityTransition.Builder()
-//                .setActivityType(DetectedActivity.IN_VEHICLE)
-//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-//                .build()
-//
-//        transitions +=
-//            ActivityTransition.Builder()
-//                .setActivityType(DetectedActivity.IN_VEHICLE)
-//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
-//                .build()
-//
-//        transitions +=
-//            ActivityTransition.Builder()
-//                .setActivityType(DetectedActivity.WALKING)
-//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-//                .build()
-//
-//        transitions +=
-//            ActivityTransition.Builder()
-//                .setActivityType(DetectedActivity.STILL)
-//                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-//                .build()
-//
-//        val request = ActivityTransitionRequest(transitions)
-//
-//        // Create an explicit intent for an Activity in your app
-//        val intent = Intent(this, MyBroadcastReceiver::class.java).apply {
-//            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-//        }
-//        val myPendingIntent: PendingIntent = PendingIntent.getBroadcast(this, 1, intent, 0)
-//
-//        val activityTask = ActivityRecognition.getClient(this)
-//            .requestActivityTransitionUpdates(request, myPendingIntent)
-//
-//        activityTask.addOnSuccessListener {
-//            // Handle success
-//            Log.e("アクティビティ", "成功")
-//            //myPendingIntent.cancel()
-//        }
-//        activityTask.addOnFailureListener { e: Exception ->
-//            // Handle error
-//            Log.e("アクティビティ", e.localizedMessage)
-//        }
-//        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION).apply {
-//            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
-//        }
-//        registerReceiver(br, filter)
 
+        //アクティビティトランジションのWIP
+
+        val intent = Intent(TRANSITIONS_RECEIVER_ACTION)
+        mActivityTransitionsPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0)
+
+        mTransitionsReceiver = TransitionsReceiver()
+        registerReceiver(mTransitionsReceiver, IntentFilter(TRANSITIONS_RECEIVER_ACTION))
+
+
+        val transitions = mutableListOf<ActivityTransition>()
+
+        transitions.add(            ActivityTransition.Builder()
+            .setActivityType(DetectedActivity.IN_VEHICLE)
+            .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+            .build())
+
+
+        transitions.add(
+            ActivityTransition.Builder()
+                .setActivityType(DetectedActivity.IN_VEHICLE)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
+                .build())
+
+        transitions.add(
+            ActivityTransition.Builder()
+                .setActivityType(DetectedActivity.WALKING)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                .build())
+
+        transitions.add(
+            ActivityTransition.Builder()
+                .setActivityType(DetectedActivity.STILL)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                .build())
+
+        val request = ActivityTransitionRequest(transitions)
+
+        val activityTask = ActivityRecognition.getClient(this)
+            .requestActivityTransitionUpdates(request, mActivityTransitionsPendingIntent)
+
+        activityTask.addOnSuccessListener {
+            // Handle success
+            Log.e("アクティビティ", "成功")
+            //myPendingIntent.cancel()
+        }
+        activityTask.addOnFailureListener { e: Exception ->
+            // Handle error
+            Log.e("アクティビティ", e.localizedMessage)
+        }
 
         // Enables Always-on
         //ambientController = AmbientModeSupport.attach(this)
