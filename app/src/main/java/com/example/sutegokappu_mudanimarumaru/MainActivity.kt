@@ -58,10 +58,10 @@ class MainActivity : WearableActivity(),  SensorEventListener, AsyncTaskCallback
                 for (event in result.transitionEvents) {
                     // chronological sequence of events....
                     Log.e("アクティビティ", event.activityType.toString())
-
+                    pushNotificationCustom("動いた！！！！" + event.activityType.toString())
                 }
-                pushNotificationCustom("動いた！！！！")
 
+                pushNotificationCustom("なにかが動いた！！！！")
 
             }
 
